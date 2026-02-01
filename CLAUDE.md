@@ -1,10 +1,4 @@
-# CLAUDE.md Template
-
-Copy this to your project root and customize. This file is read at the start of every Claude Code session.
-
----
-
-# Project: [Your Project Name]
+# Project: MiseKai
 
 ## Quick Commands
 
@@ -30,13 +24,53 @@ npm run build
 
 ## Tech Stack
 
+> For detailed technology comparisons and justifications, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
 - **Language**: TypeScript 5.x
 - **Runtime**: Node.js 20+
-- **Framework**: [e.g., Next.js 14, Express, etc.]
-- **Database**: [e.g., PostgreSQL, MongoDB, etc.]
-- **ORM**: [e.g., Prisma, Drizzle, etc.]
-- **Testing**: [e.g., Vitest, Jest, Playwright]
-- **Styling**: [e.g., Tailwind CSS, CSS Modules]
+- **Framework**: Next.js 14 (App Router)
+- **Database**: PostgreSQL (via Supabase)
+- **Auth**: Supabase Auth (GoTrue)
+- **ORM**: Supabase Client SDK
+- **Validation**: Zod
+- **Data Fetching**: TanStack Query
+- **UI Components**: shadcn/ui (Radix primitives)
+- **Testing**: Vitest, Playwright
+- **Styling**: Tailwind CSS
+- **AI**: Claude API (delay categorization, insights)
+- **Hosting**: Vercel
+
+## Architectural Decisions
+
+> Full technology comparisons with alternatives are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
+### ADR-001: Supabase for Database & Auth (2026-02-01)
+
+**Status**: Accepted
+
+**Context**: Need database and auth infrastructure. Future plans may include AWS migration.
+
+**Decision**: Use Supabase (Option A - use now, migrate later if needed)
+
+**Rationale**:
+- Faster initial development
+- PostgreSQL underneath = database layer is portable
+- RLS policies are native PostgreSQL (no lock-in)
+- Auth is the primary lock-in point, but migration is feasible
+
+**Lock-in Assessment**:
+| Component | Portability | Migration Path |
+|-----------|-------------|----------------|
+| PostgreSQL DB | 100% portable | Direct export to RDS |
+| SQL Migrations | 100% portable | Standard SQL |
+| RLS Policies | 100% portable | Native PostgreSQL |
+| Supabase Auth | Requires migration | → AWS Cognito or Auth0 |
+| Supabase Client | Requires replacement | → Prisma/Drizzle |
+
+**Consequences**:
+- Accept auth migration effort if moving to AWS
+- Keep auth logic in dedicated modules for easier future extraction
+- Document all Supabase-specific code patterns
 
 ## Project Structure
 
@@ -54,6 +88,7 @@ project/
 │   ├── integration/    # Integration tests
 │   └── e2e/            # End-to-end tests
 ├── docs/
+│   ├── ARCHITECTURE.md    # Technology decisions & system design
 │   ├── PROJECT_CHARTER.md
 │   ├── PRD.md
 │   └── modules/
@@ -116,8 +151,8 @@ try {
 ### API Calls
 
 - DON'T: Fetch in useEffect without cleanup
-- DO: Use React Query or SWR for data fetching
-- REASON: Handles caching, loading, errors properly
+- DO: Use TanStack Query for data fetching
+- REASON: Handles caching, loading, errors, optimistic updates
 
 ### State Management
 
@@ -166,9 +201,13 @@ export async function handler(req: Request) {
 Required variables (see `.env.example`):
 
 ```
-DATABASE_URL=
-API_SECRET=
-NEXT_PUBLIC_API_URL=
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+
+# AI (for delay categorization)
+ANTHROPIC_API_KEY=
 ```
 
 ## Git Workflow
@@ -184,5 +223,4 @@ NEXT_PUBLIC_API_URL=
 
 ---
 
-*Last updated: [Date]*
-*Maintained by: [Team/Person]*
+*Last updated: 2026-02-01*
