@@ -1,21 +1,25 @@
 "use client";
 
-import { useState } from "react";
 import {
   ColumnDef,
   flexRender,
   getCoreRowModel,
-  getSortedRowModel,
-  SortingState,
   useReactTable,
 } from "@tanstack/react-table";
 import { format } from "date-fns";
-import { ArrowUpDown, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -33,28 +37,38 @@ interface ActionsTableProps {
   actions: Action[];
   onEdit: (action: Action) => void;
   onDelete: (action: Action) => void;
+  sortBy?: "due_date" | "created_at" | "status";
+  sortOrder?: "asc" | "desc";
 }
 
-export function ActionsTable({ actions, onEdit, onDelete }: ActionsTableProps) {
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "due_date", desc: false },
-  ]);
+export function ActionsTable({
+  actions,
+  onEdit,
+  onDelete,
+  sortBy = "due_date",
+  sortOrder = "asc",
+}: ActionsTableProps) {
+  // Helper to render sort indicator
+  const SortIndicator = ({ columnKey }: { columnKey: string }) => {
+    if (sortBy !== columnKey) return null;
+    return sortOrder === "asc" ? (
+      <ArrowUp className="ml-1 h-4 w-4" />
+    ) : (
+      <ArrowDown className="ml-1 h-4 w-4" />
+    );
+  };
 
   const columns: ColumnDef<Action>[] = [
     {
       accessorKey: "created_at",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4"
-          >
+      header: () => (
+        <div className="flex items-center">
+          <span className={sortBy === "created_at" ? "font-semibold" : ""}>
             Created
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
+          </span>
+          <SortIndicator columnKey="created_at" />
+        </div>
+      ),
       cell: ({ row }) => {
         const date = new Date(row.getValue("created_at"));
         return <span className="text-sm">{format(date, "MMM d, yyyy")}</span>;
@@ -76,21 +90,20 @@ export function ActionsTable({ actions, onEdit, onDelete }: ActionsTableProps) {
     },
     {
       accessorKey: "due_date",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4"
-          >
+      header: () => (
+        <div className="flex items-center">
+          <span className={sortBy === "due_date" ? "font-semibold" : ""}>
             Due Date
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
+          </span>
+          <SortIndicator columnKey="due_date" />
+        </div>
+      ),
       cell: ({ row }) => {
         const date = new Date(row.getValue("due_date"));
-        const isOverdue = date < new Date() && row.original.status !== "complete";
+        const isOverdue =
+          date < new Date() &&
+          row.original.status !== "complete" &&
+          row.original.status !== "backlog";
         return (
           <span className={isOverdue ? "text-destructive font-medium" : ""}>
             {format(date, "MMM d, yyyy")}
@@ -100,18 +113,14 @@ export function ActionsTable({ actions, onEdit, onDelete }: ActionsTableProps) {
     },
     {
       accessorKey: "status",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4"
-          >
+      header: () => (
+        <div className="flex items-center">
+          <span className={sortBy === "status" ? "font-semibold" : ""}>
             Status
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
+          </span>
+          <SortIndicator columnKey="status" />
+        </div>
+      ),
       cell: ({ row }) => {
         return <ActionStatusBadge status={row.getValue("status")} />;
       },
@@ -150,10 +159,17 @@ export function ActionsTable({ actions, onEdit, onDelete }: ActionsTableProps) {
                 <Pencil className="mr-2 h-4 w-4" />
                 Edit
               </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+
               <DropdownMenuItem
                 onClick={() => onDelete(action)}
                 disabled={isCompleted}
-                className={isCompleted ? "text-muted-foreground" : "text-destructive focus:text-destructive"}
+                className={
+                  isCompleted
+                    ? "text-muted-foreground"
+                    : "text-destructive focus:text-destructive"
+                }
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete
@@ -170,52 +186,60 @@ export function ActionsTable({ actions, onEdit, onDelete }: ActionsTableProps) {
     data: actions,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    onSortingChange: setSorting,
-    state: {
-      sorting,
-    },
   });
 
   return (
-    <div className="rounded-md border">
-      <Table>
-        <TableHeader>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <TableHead key={header.id}>
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
-                </TableHead>
+    <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+      <div className="min-w-[800px]">
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <TableHead key={header.id}>
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
+                    </TableHead>
+                  ))}
+                </TableRow>
               ))}
-            </TableRow>
-          ))}
-        </TableHeader>
-        <TableBody>
-          {table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map((row) => (
-              <TableRow
-                key={row.id}
-                data-state={row.getIsSelected() && "selected"}
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    data-state={row.getIsSelected() && "selected"}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={columns.length}
+                    className="h-24 text-center"
+                  >
+                    No actions found.
                   </TableCell>
-                ))}
-              </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell colSpan={columns.length} className="h-24 text-center">
-                No actions found.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
     </div>
   );
 }

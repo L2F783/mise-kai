@@ -18,10 +18,15 @@ describe("ActionStatusBadge", () => {
     expect(screen.getByText("Complete")).toBeInTheDocument();
   });
 
-  it("applies green styling for on_target status", () => {
+  it("renders Backlog status correctly", () => {
+    render(<ActionStatusBadge status="backlog" />);
+    expect(screen.getByText("Backlog")).toBeInTheDocument();
+  });
+
+  it("applies yellow styling for on_target status", () => {
     render(<ActionStatusBadge status="on_target" />);
     const badge = screen.getByText("On Target");
-    expect(badge).toHaveClass("text-green-700");
+    expect(badge).toHaveClass("text-yellow-700");
   });
 
   it("applies amber styling for delayed status", () => {
@@ -34,6 +39,12 @@ describe("ActionStatusBadge", () => {
     render(<ActionStatusBadge status="complete" />);
     const badge = screen.getByText("Complete");
     expect(badge).toHaveClass("text-slate-700");
+  });
+
+  it("applies purple styling for backlog status", () => {
+    render(<ActionStatusBadge status="backlog" />);
+    const badge = screen.getByText("Backlog");
+    expect(badge).toHaveClass("text-purple-700");
   });
 
   it("accepts custom className", () => {

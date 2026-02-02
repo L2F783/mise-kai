@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Plus, RefreshCw } from "lucide-react";
+import { Plus, RefreshCw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -17,11 +17,18 @@ import { EmptyState } from "@/components/actions/empty-state";
 import { CreateActionModal } from "@/components/actions/create-action-modal";
 import { EditActionModal } from "@/components/actions/edit-action-modal";
 import { DeleteActionDialog } from "@/components/actions/delete-action-dialog";
-import { useActions, type ActionsQueryParams } from "@/hooks/use-actions";
+import { ActionTabs, type ActionTab } from "@/components/actions/action-tabs";
+import { StatusSummary } from "@/components/actions/status-summary";
+import {
+  useActionsInfinite,
+  useTabCounts,
+  type ActionsQueryParams,
+} from "@/hooks/use-actions";
 import type { Action, ActionStatus } from "@/types/database";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-const STATUS_OPTIONS = [
+// Status options change based on active tab
+const ACTIVE_STATUS_OPTIONS = [
   { value: "all", label: "All Status" },
   { value: "on_target", label: "On Target" },
   { value: "delayed", label: "Delayed" },
@@ -37,13 +44,18 @@ const SORT_OPTIONS = [
 export default function ActionsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   // Get filter params from URL
+  const tabParam = searchParams.get("tab") as ActionTab | null;
   const statusParam = searchParams.get("status") as ActionStatus | "all" | null;
   const sortByParam = searchParams.get("sortBy") as ActionsQueryParams["sortBy"] | null;
   const sortOrderParam = searchParams.get("sortOrder") as "asc" | "desc" | null;
 
-  const queryParams: ActionsQueryParams = {
+  const currentTab: ActionTab = tabParam === "backlog" ? "backlog" : "active";
+
+  const queryParams: Omit<ActionsQueryParams, "page"> = {
+    tab: currentTab,
     status: statusParam ?? "all",
     sortBy: sortByParam ?? "due_date",
     sortOrder: sortOrderParam ?? "asc",
@@ -55,20 +67,81 @@ export default function ActionsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedAction, setSelectedAction] = useState<Action | null>(null);
 
-  // Fetch actions
-  const { data, isLoading, isError, error, refetch } = useActions(queryParams);
+  // Fetch actions with infinite scroll
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useActionsInfinite(queryParams);
+
+  // Fetch tab counts
+  const { data: tabCounts } = useTabCounts();
+
+  // Flatten pages into single array
+  const allActions = data?.pages.flatMap((page) => page.data) ?? [];
+  const totalCount = data?.pages[0]?.meta.total ?? 0;
+
+  // Set up intersection observer for infinite scroll
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // Update URL params
-  const updateParams = (updates: Partial<ActionsQueryParams>) => {
-    const params = new URLSearchParams(searchParams.toString());
-    Object.entries(updates).forEach(([key, value]) => {
-      if (value && value !== "all" && value !== "due_date" && value !== "asc") {
-        params.set(key, String(value));
-      } else {
-        params.delete(key);
-      }
-    });
-    router.push(`/dashboard/actions?${params.toString()}`);
+  const updateParams = useCallback(
+    (updates: Partial<ActionsQueryParams & { tab: ActionTab }>) => {
+      const params = new URLSearchParams(searchParams.toString());
+
+      Object.entries(updates).forEach(([key, value]) => {
+        // Set tab param
+        if (key === "tab") {
+          if (value === "backlog") {
+            params.set("tab", "backlog");
+          } else {
+            params.delete("tab"); // active is default
+          }
+          // Clear status when switching tabs
+          params.delete("status");
+          return;
+        }
+
+        // Set other params
+        if (
+          value &&
+          value !== "all" &&
+          value !== "due_date" &&
+          value !== "asc"
+        ) {
+          params.set(key, String(value));
+        } else {
+          params.delete(key);
+        }
+      });
+
+      router.push(`/dashboard/actions?${params.toString()}`);
+    },
+    [router, searchParams]
+  );
+
+  const handleTabChange = (tab: ActionTab) => {
+    updateParams({ tab });
   };
 
   const handleEdit = (action: Action) => {
@@ -115,28 +188,42 @@ export default function ActionsPage() {
         </Button>
       </div>
 
+      {/* Status Summary */}
+      <StatusSummary />
+
+      {/* Tabs */}
+      <ActionTabs
+        activeTab={currentTab}
+        onTabChange={handleTabChange}
+        activeCount={tabCounts?.activeCount ?? 0}
+        backlogCount={tabCounts?.backlogCount ?? 0}
+      />
+
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Status:</span>
-          <Select
-            value={queryParams.status ?? "all"}
-            onValueChange={(value) =>
-              updateParams({ status: value as ActionStatus | "all" })
-            }
-          >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Filter by status" />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUS_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {/* Status filter - only show for active tab */}
+        {currentTab === "active" && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Status:</span>
+            <Select
+              value={queryParams.status ?? "all"}
+              onValueChange={(value) =>
+                updateParams({ status: value as ActionStatus | "all" })
+              }
+            >
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                {ACTIVE_STATUS_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Sort by:</span>
@@ -206,33 +293,48 @@ export default function ActionsPage() {
       {/* Content */}
       {isLoading ? (
         <ActionsTableSkeleton />
-      ) : data?.data && data.data.length > 0 ? (
+      ) : allActions.length > 0 ? (
         <>
           <ActionsTable
-            actions={data.data}
+            actions={allActions}
             onEdit={handleEdit}
             onDelete={handleDelete}
+            sortBy={queryParams.sortBy}
+            sortOrder={queryParams.sortOrder}
           />
-          {/* Pagination info */}
-          {data.meta && (
-            <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>
-                Showing {data.data.length} of {data.meta.total} actions
+
+          {/* Infinite scroll sentinel */}
+          <div ref={sentinelRef} className="h-4" />
+
+          {/* Loading more indicator */}
+          {isFetchingNextPage && (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <span className="ml-2 text-sm text-muted-foreground">
+                Loading more...
               </span>
-              {data.meta.pages > 1 && (
-                <span>
-                  Page {data.meta.page} of {data.meta.pages}
-                </span>
-              )}
             </div>
           )}
+
+          {/* Items count */}
+          <div className="text-sm text-muted-foreground text-center">
+            Showing {allActions.length} of {totalCount} actions
+          </div>
         </>
       ) : (
-        !isError && <EmptyState onCreateAction={() => setCreateModalOpen(true)} />
+        !isError && (
+          <EmptyState
+            onCreateAction={() => setCreateModalOpen(true)}
+            isBacklog={currentTab === "backlog"}
+          />
+        )
       )}
 
       {/* Modals */}
-      <CreateActionModal open={createModalOpen} onOpenChange={handleCreateModalClose} />
+      <CreateActionModal
+        open={createModalOpen}
+        onOpenChange={handleCreateModalClose}
+      />
       <EditActionModal
         action={selectedAction}
         open={editModalOpen}

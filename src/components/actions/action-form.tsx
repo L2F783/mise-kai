@@ -18,14 +18,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createActionSchema, MANUAL_STATUS_OPTIONS } from "@/lib/validations/action";
-import type { CreateActionInput } from "@/lib/validations/action";
-import type { Action, ActionStatus } from "@/types/database";
+import { createActionSchema, editFormSchema, MANUAL_STATUS_OPTIONS } from "@/lib/validations/action";
+import type { EditFormInput } from "@/lib/validations/action";
+import type { Action } from "@/types/database";
 import { cn } from "@/lib/utils";
 
 interface ActionFormProps {
   action?: Action;
-  onSubmit: (data: CreateActionInput & { status?: ActionStatus }) => Promise<void>;
+  onSubmit: (data: EditFormInput) => Promise<void>;
   onCancel: () => void;
   isSubmitting?: boolean;
 }
@@ -34,20 +34,22 @@ export function ActionForm({ action, onSubmit, onCancel, isSubmitting = false }:
   const isEditing = !!action;
   const [charCount, setCharCount] = useState(action?.description?.length ?? 0);
 
+  // Use editFormSchema which includes optional status field
+  // For create, status will just be undefined (which is fine)
   const {
     register,
     handleSubmit,
     watch,
     setValue,
     formState: { errors, isValid },
-  } = useForm<CreateActionInput & { status?: ActionStatus }>({
-    resolver: zodResolver(createActionSchema),
+  } = useForm<EditFormInput>({
+    resolver: zodResolver(isEditing ? editFormSchema : createActionSchema),
     mode: "onBlur",
     defaultValues: {
       description: action?.description ?? "",
       due_date: action?.due_date ?? "",
       notes: action?.notes ?? "",
-      ...(isEditing && action?.status !== "delayed" ? { status: action?.status } : {}),
+      ...(isEditing ? { status: action?.status as EditFormInput["status"] } : {}),
     },
   });
 
@@ -58,7 +60,7 @@ export function ActionForm({ action, onSubmit, onCancel, isSubmitting = false }:
     setCharCount(description?.length ?? 0);
   }, [description]);
 
-  const handleFormSubmit = async (data: CreateActionInput & { status?: ActionStatus }) => {
+  const handleFormSubmit = async (data: EditFormInput) => {
     await onSubmit(data);
   };
 
@@ -148,13 +150,13 @@ export function ActionForm({ action, onSubmit, onCancel, isSubmitting = false }:
         )}
       </div>
 
-      {/* Status field (only for editing, and only if not delayed) */}
-      {isEditing && action?.status !== "delayed" && (
+      {/* Status field (only for editing) */}
+      {isEditing && (
         <div className="space-y-2">
           <Label>Status</Label>
           <Select
             defaultValue={action?.status}
-            onValueChange={(value) => setValue("status", value as ActionStatus)}
+            onValueChange={(value) => setValue("status", value as EditFormInput["status"])}
           >
             <SelectTrigger>
               <SelectValue placeholder="Select status" />
@@ -167,9 +169,6 @@ export function ActionForm({ action, onSubmit, onCancel, isSubmitting = false }:
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
-            Note: To mark as Delayed, use the delay workflow.
-          </p>
         </div>
       )}
 

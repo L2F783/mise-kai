@@ -170,11 +170,11 @@ describe("Action Validation Schemas", () => {
       expect(result.success).toBe(true);
     });
 
-    it("rejects delayed status (requires M-03 workflow)", () => {
+    it("accepts delayed status", () => {
       const result = updateActionSchema.safeParse({
         status: "delayed",
       });
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
     });
 
     it("rejects invalid status", () => {
@@ -289,15 +289,24 @@ describe("Action Validation Schemas", () => {
       expect(option?.label).toBe("Complete");
     });
 
-    it("does not contain delayed option", () => {
+    it("contains delayed option", () => {
       const option = MANUAL_STATUS_OPTIONS.find(
         (o) => (o.value as string) === "delayed"
       );
-      expect(option).toBeUndefined();
+      expect(option).toBeDefined();
+      expect(option?.label).toBe("Delayed");
     });
 
-    it("has exactly 2 options", () => {
-      expect(MANUAL_STATUS_OPTIONS.length).toBe(2);
+    it("contains backlog option", () => {
+      const option = MANUAL_STATUS_OPTIONS.find(
+        (o) => (o.value as string) === "backlog"
+      );
+      expect(option).toBeDefined();
+      expect(option?.label).toBe("Backlog");
+    });
+
+    it("has exactly 4 options", () => {
+      expect(MANUAL_STATUS_OPTIONS.length).toBe(4);
     });
   });
 });

@@ -3,14 +3,16 @@ import type { ActionStatus } from "@/types/database";
 
 /**
  * Helper to validate date is not in the past (for create)
+ * Compares date strings directly to avoid timezone issues
  */
 const futureDateSchema = z
   .string()
   .refine((date) => {
+    // Get today's date as YYYY-MM-DD in local timezone
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const inputDate = new Date(date);
-    return inputDate >= today;
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    // Compare as strings (YYYY-MM-DD format sorts correctly)
+    return date >= todayStr;
   }, "Due date cannot be in the past");
 
 /**
@@ -48,27 +50,37 @@ export const updateActionSchema = z.object({
     .max(2000, "Notes must not exceed 2000 characters")
     .optional()
     .nullable(),
-  // Note: 'delayed' status is NOT allowed here - requires delay reason (M-03)
-  status: z.enum(["on_target", "complete"] as const).optional(),
+  status: z.enum(["on_target", "delayed", "complete", "backlog"] as const).optional(),
 });
 
 /**
  * Query params for listing actions
  */
 export const actionsQuerySchema = z.object({
-  status: z.enum(["on_target", "delayed", "complete", "all"] as const).optional().default("all"),
+  status: z.enum(["on_target", "delayed", "complete", "backlog", "all"] as const).optional().default("all"),
   sortBy: z.enum(["due_date", "created_at", "status"] as const).optional().default("due_date"),
   sortOrder: z.enum(["asc", "desc"] as const).optional().default("asc"),
   page: z.coerce.number().int().positive().optional().default(1),
   limit: z.coerce.number().int().positive().max(100).optional().default(20),
 });
 
+/**
+ * Schema for the edit form - extends create schema with optional status
+ * Used in ActionForm when editing to include status in form data
+ */
+export const editFormSchema = createActionSchema.extend({
+  status: z.enum(["on_target", "delayed", "complete", "backlog"] as const).optional(),
+});
+
 export type CreateActionInput = z.infer<typeof createActionSchema>;
 export type UpdateActionInput = z.infer<typeof updateActionSchema>;
+export type EditFormInput = z.infer<typeof editFormSchema>;
 export type ActionsQueryInput = z.infer<typeof actionsQuerySchema>;
 
-// Status options available for manual update (excludes 'delayed')
-export const MANUAL_STATUS_OPTIONS: Array<{ value: Exclude<ActionStatus, 'delayed'>; label: string }> = [
+// Status options available for manual update
+export const MANUAL_STATUS_OPTIONS: Array<{ value: ActionStatus; label: string }> = [
   { value: "on_target", label: "On Target" },
+  { value: "delayed", label: "Delayed" },
   { value: "complete", label: "Complete" },
+  { value: "backlog", label: "Backlog" },
 ];

@@ -2,17 +2,26 @@
 
 import { revalidatePath } from "next/cache";
 import { createActionSchema, updateActionSchema } from "@/lib/validations/action";
-import { createAction, updateAction, deleteAction } from "@/lib/actions/queries";
+import {
+  createAction,
+  updateAction,
+  deleteAction,
+  getActiveCount,
+  WIP_LIMIT,
+} from "@/lib/actions/queries";
 import type { Action } from "@/types/database";
 
 export interface ActionResult<T = void> {
   data?: T;
   error?: string;
   fieldErrors?: Record<string, string[]>;
+  /** Indicates the action was auto-assigned to backlog due to WIP limit */
+  autoBacklogged?: boolean;
 }
 
 /**
  * Server action to create a new action.
+ * If user is at WIP limit, action is auto-assigned to backlog.
  */
 export async function createActionAction(
   input: unknown
@@ -32,14 +41,18 @@ export async function createActionAction(
       return { error: "Validation failed", fieldErrors };
     }
 
-    // Create the action
-    const action = await createAction(result.data);
+    // Check WIP limit
+    const activeCount = await getActiveCount();
+    const atWipLimit = activeCount >= WIP_LIMIT;
+
+    // Create the action (createAction will handle auto-backlog if needed)
+    const action = await createAction(result.data, atWipLimit);
 
     // Revalidate the actions list
     revalidatePath("/dashboard/actions");
     revalidatePath("/dashboard");
 
-    return { data: action };
+    return { data: action, autoBacklogged: atWipLimit };
   } catch (error) {
     console.error("Create action error:", error);
     if (error instanceof Error) {

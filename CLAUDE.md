@@ -233,6 +233,21 @@ See [docs/lessons.md](docs/lessons.md) for detailed lessons learned.
 - DO: Verify folder structure matches CLAUDE.md before writing code
 - REASON: Restructuring after implementation wastes time and risks conflicts
 
+### L-002: Zod Strips Undefined Schema Fields (2026-02-02)
+- DON'T: Use create schema for edit forms needing extra fields
+- DO: Create edit schema extending create schema
+- REASON: zodResolver strips fields not in schema
+
+### L-003: React Query Infinite Query Invalidation (2026-02-02)
+- DON'T: Use `invalidateQueries({ queryKey: actionsKeys.lists() })`
+- DO: Use `{ queryKey: actionsKeys.all, refetchType: 'all' }`
+- REASON: Ensures infinite scroll queries refresh
+
+### L-004: Database Constraints vs TypeScript (2026-02-02)
+- DON'T: Assume TS compilation = DB accepts values
+- DO: Verify DB CHECK constraints match TS types
+- REASON: Runtime errors when DB rejects valid TS values
+
 ---
 
-*Last updated: 2026-02-01* (Tailwind CSS v4 upgrade)
+*Last updated: 2026-02-02* (Added session learnings L-002 through L-004)

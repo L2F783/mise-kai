@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { ActionForm } from "./action-form";
 import { useCreateAction } from "@/hooks/use-actions";
-import type { CreateActionInput } from "@/lib/validations/action";
+import type { EditFormInput } from "@/lib/validations/action";
 import { toast } from "sonner";
 
 interface CreateActionModalProps {
@@ -20,10 +20,22 @@ interface CreateActionModalProps {
 export function CreateActionModal({ open, onOpenChange }: CreateActionModalProps) {
   const createAction = useCreateAction();
 
-  const handleSubmit = async (data: CreateActionInput) => {
+  const handleSubmit = async (data: EditFormInput) => {
     try {
-      await createAction.mutateAsync(data);
-      toast.success("Action created successfully");
+      // For create, only pass the base fields (status is ignored)
+      const result = await createAction.mutateAsync({
+        description: data.description,
+        due_date: data.due_date,
+        notes: data.notes,
+      });
+      if (result.autoBacklogged) {
+        toast.info("Action added to backlog (WIP limit of 5 reached)", {
+          description: "Complete or move an active item to backlog to add more.",
+          duration: 5000,
+        });
+      } else {
+        toast.success("Action created successfully");
+      }
       onOpenChange(false);
     } catch (error) {
       if (error instanceof Error) {
