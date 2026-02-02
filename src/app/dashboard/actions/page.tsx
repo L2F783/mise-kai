@@ -32,6 +32,7 @@ const ACTIVE_STATUS_OPTIONS = [
   { value: "all", label: "All Status" },
   { value: "on_target", label: "On Target" },
   { value: "delayed", label: "Delayed" },
+  { value: "complete", label: "Complete" },
 ];
 
 const SORT_OPTIONS = [
@@ -298,6 +299,8 @@ export default function ActionsPage() {
             actions={allActions}
             onEdit={handleEdit}
             onDelete={handleDelete}
+            sortBy={queryParams.sortBy}
+            sortOrder={queryParams.sortOrder}
           />
 
           {/* Infinite scroll sentinel */}

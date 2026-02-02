@@ -1,17 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import {
   ColumnDef,
   flexRender,
   getCoreRowModel,
-  getSortedRowModel,
-  SortingState,
   useReactTable,
 } from "@tanstack/react-table";
 import { format } from "date-fns";
 import {
-  ArrowUpDown,
+  ArrowDown,
+  ArrowUp,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -39,32 +37,38 @@ interface ActionsTableProps {
   actions: Action[];
   onEdit: (action: Action) => void;
   onDelete: (action: Action) => void;
+  sortBy?: "due_date" | "created_at" | "status";
+  sortOrder?: "asc" | "desc";
 }
 
 export function ActionsTable({
   actions,
   onEdit,
   onDelete,
+  sortBy = "due_date",
+  sortOrder = "asc",
 }: ActionsTableProps) {
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "due_date", desc: false },
-  ]);
+  // Helper to render sort indicator
+  const SortIndicator = ({ columnKey }: { columnKey: string }) => {
+    if (sortBy !== columnKey) return null;
+    return sortOrder === "asc" ? (
+      <ArrowUp className="ml-1 h-4 w-4" />
+    ) : (
+      <ArrowDown className="ml-1 h-4 w-4" />
+    );
+  };
 
   const columns: ColumnDef<Action>[] = [
     {
       accessorKey: "created_at",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4"
-          >
+      header: () => (
+        <div className="flex items-center">
+          <span className={sortBy === "created_at" ? "font-semibold" : ""}>
             Created
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
+          </span>
+          <SortIndicator columnKey="created_at" />
+        </div>
+      ),
       cell: ({ row }) => {
         const date = new Date(row.getValue("created_at"));
         return <span className="text-sm">{format(date, "MMM d, yyyy")}</span>;
@@ -86,18 +90,14 @@ export function ActionsTable({
     },
     {
       accessorKey: "due_date",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4"
-          >
+      header: () => (
+        <div className="flex items-center">
+          <span className={sortBy === "due_date" ? "font-semibold" : ""}>
             Due Date
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
+          </span>
+          <SortIndicator columnKey="due_date" />
+        </div>
+      ),
       cell: ({ row }) => {
         const date = new Date(row.getValue("due_date"));
         const isOverdue =
@@ -113,18 +113,14 @@ export function ActionsTable({
     },
     {
       accessorKey: "status",
-      header: ({ column }) => {
-        return (
-          <Button
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="-ml-4"
-          >
+      header: () => (
+        <div className="flex items-center">
+          <span className={sortBy === "status" ? "font-semibold" : ""}>
             Status
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
+          </span>
+          <SortIndicator columnKey="status" />
+        </div>
+      ),
       cell: ({ row }) => {
         return <ActionStatusBadge status={row.getValue("status")} />;
       },
@@ -190,11 +186,6 @@ export function ActionsTable({
     data: actions,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    onSortingChange: setSorting,
-    state: {
-      sorting,
-    },
   });
 
   return (
