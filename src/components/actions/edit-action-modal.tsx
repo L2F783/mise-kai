@@ -9,8 +9,8 @@ import {
 } from "@/components/ui/dialog";
 import { ActionForm } from "./action-form";
 import { useUpdateAction } from "@/hooks/use-actions";
-import type { Action, ActionStatus } from "@/types/database";
-import type { CreateActionInput } from "@/lib/validations/action";
+import type { Action } from "@/types/database";
+import type { EditFormInput } from "@/lib/validations/action";
 import { toast } from "sonner";
 
 interface EditActionModalProps {
@@ -22,7 +22,7 @@ interface EditActionModalProps {
 export function EditActionModal({ action, open, onOpenChange }: EditActionModalProps) {
   const updateAction = useUpdateAction();
 
-  const handleSubmit = async (data: CreateActionInput & { status?: ActionStatus }) => {
+  const handleSubmit = async (data: EditFormInput) => {
     if (!action) return;
 
     try {
@@ -32,8 +32,8 @@ export function EditActionModal({ action, open, onOpenChange }: EditActionModalP
           description: data.description,
           due_date: data.due_date,
           notes: data.notes,
-          // Only include status if it's a valid manual status (not 'delayed')
-          ...(data.status && data.status !== "delayed" ? { status: data.status } : {}),
+          // Include status if provided (schema ensures it's a valid manual status)
+          ...(data.status ? { status: data.status } : {}),
         },
       });
       toast.success("Action updated successfully");

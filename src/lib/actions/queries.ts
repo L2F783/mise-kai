@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Action, ActionStatus, DueDateHistory } from "@/types/database";
 import type { CreateActionInput, UpdateActionInput, ActionsQueryInput } from "@/lib/validations/action";
+import type { ActionTab } from "@/components/actions/action-tabs";
+export { WIP_LIMIT } from "./constants";
 
 export interface PaginatedActions {
   data: Action[];
@@ -12,18 +14,37 @@ export interface PaginatedActions {
   };
 }
 
+export interface ActionsQueryWithTab extends ActionsQueryInput {
+  tab?: ActionTab;
+}
+
 /**
  * Get paginated actions with filtering and sorting.
  * RLS policies handle user-based filtering (team members see own, PM sees all).
+ *
+ * Tab filtering:
+ * - "active": Shows items with status = "on_target" OR "delayed"
+ * - "backlog": Shows items with status = "backlog"
  */
-export async function getActions(params: ActionsQueryInput): Promise<PaginatedActions> {
+export async function getActions(params: ActionsQueryWithTab): Promise<PaginatedActions> {
   const supabase = await createClient();
-  const { status, sortBy, sortOrder, page, limit } = params;
+  const { status, sortBy, sortOrder, page, limit, tab } = params;
 
   let query = supabase.from("actions").select("*", { count: "exact" });
 
-  // Filter by status (unless 'all')
-  if (status && status !== "all") {
+  // Apply tab filtering first (takes precedence)
+  if (tab === "active") {
+    query = query.in("status", ["on_target", "delayed"]);
+  } else if (tab === "backlog") {
+    query = query.eq("status", "backlog");
+  }
+
+  // Apply additional status filter within tab (only if not already filtered by tab)
+  // This allows filtering within the active tab (e.g., show only delayed items)
+  if (!tab && status && status !== "all") {
+    query = query.eq("status", status);
+  } else if (tab === "active" && status && status !== "all" && (status === "on_target" || status === "delayed")) {
+    // Allow filtering within active tab
     query = query.eq("status", status);
   }
 
@@ -56,6 +77,56 @@ export async function getActions(params: ActionsQueryInput): Promise<PaginatedAc
 }
 
 /**
+ * Get count of active items (on_target + delayed) for WIP limit check.
+ */
+export async function getActiveCount(): Promise<number> {
+  const supabase = await createClient();
+
+  const { count, error } = await supabase
+    .from("actions")
+    .select("*", { count: "exact", head: true })
+    .in("status", ["on_target", "delayed"]);
+
+  if (error) {
+    throw new Error(`Failed to get active count: ${error.message}`);
+  }
+
+  return count ?? 0;
+}
+
+/**
+ * Get counts for both tabs (active and backlog).
+ */
+export async function getTabCounts(): Promise<{ activeCount: number; backlogCount: number }> {
+  const supabase = await createClient();
+
+  // Get active count (on_target + delayed)
+  const { count: activeCount, error: activeError } = await supabase
+    .from("actions")
+    .select("*", { count: "exact", head: true })
+    .in("status", ["on_target", "delayed"]);
+
+  if (activeError) {
+    throw new Error(`Failed to get active count: ${activeError.message}`);
+  }
+
+  // Get backlog count
+  const { count: backlogCount, error: backlogError } = await supabase
+    .from("actions")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "backlog");
+
+  if (backlogError) {
+    throw new Error(`Failed to get backlog count: ${backlogError.message}`);
+  }
+
+  return {
+    activeCount: activeCount ?? 0,
+    backlogCount: backlogCount ?? 0,
+  };
+}
+
+/**
  * Get a single action by ID.
  * RLS policies ensure user can only access their own actions (unless PM).
  */
@@ -82,8 +153,9 @@ export async function getActionById(id: string): Promise<Action | null> {
 /**
  * Create a new action.
  * The owner_id is automatically set to the authenticated user.
+ * If autoBacklog is true, the action is created with backlog status.
  */
-export async function createAction(input: CreateActionInput): Promise<Action> {
+export async function createAction(input: CreateActionInput, autoBacklog = false): Promise<Action> {
   const supabase = await createClient();
 
   // Get current user
@@ -97,7 +169,7 @@ export async function createAction(input: CreateActionInput): Promise<Action> {
     due_date: input.due_date,
     notes: input.notes ?? null,
     owner_id: user.id,
-    status: "on_target" as ActionStatus,
+    status: (autoBacklog ? "backlog" : "on_target") as ActionStatus,
     client_visible: false,
     auto_flagged: false,
     completed_at: null,

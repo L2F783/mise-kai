@@ -1,9 +1,10 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { Action, ActionStatus } from "@/types/database";
 import type { CreateActionInput, UpdateActionInput } from "@/lib/validations/action";
+import type { ActionTab } from "@/components/actions/action-tabs";
 import {
   createActionAction,
   updateActionAction,
@@ -11,6 +12,7 @@ import {
 } from "@/app/dashboard/actions/_actions";
 
 export interface ActionsQueryParams {
+  tab?: ActionTab;
   status?: ActionStatus | "all";
   sortBy?: "due_date" | "created_at" | "status";
   sortOrder?: "asc" | "desc";
@@ -28,7 +30,8 @@ export interface PaginatedActions {
   };
 }
 
-const defaultParams: Required<ActionsQueryParams> = {
+const defaultParams: Required<Omit<ActionsQueryParams, "tab">> & { tab: ActionTab } = {
+  tab: "active",
   status: "all",
   sortBy: "due_date",
   sortOrder: "asc",
@@ -43,21 +46,34 @@ export const actionsKeys = {
   all: ["actions"] as const,
   lists: () => [...actionsKeys.all, "list"] as const,
   list: (params: ActionsQueryParams) => [...actionsKeys.lists(), params] as const,
+  infinite: (params: ActionsQueryParams) => [...actionsKeys.lists(), "infinite", params] as const,
   details: () => [...actionsKeys.all, "detail"] as const,
   detail: (id: string) => [...actionsKeys.details(), id] as const,
+  counts: () => [...actionsKeys.all, "counts"] as const,
+  statusCounts: () => [...actionsKeys.all, "statusCounts"] as const,
 };
 
 /**
  * Fetch actions from Supabase client-side
  */
-async function fetchActions(params: Required<ActionsQueryParams>): Promise<PaginatedActions> {
+async function fetchActions(params: ActionsQueryParams & { page: number; limit: number }): Promise<PaginatedActions> {
   const supabase = createClient();
-  const { status, sortBy, sortOrder, page, limit } = params;
+  const { tab, status, sortBy = "due_date", sortOrder = "asc", page, limit } = params;
 
   let query = supabase.from("actions").select("*", { count: "exact" });
 
-  // Filter by status (unless 'all')
-  if (status !== "all") {
+  // Apply tab filtering first (takes precedence)
+  if (tab === "active") {
+    query = query.in("status", ["on_target", "delayed"]);
+  } else if (tab === "backlog") {
+    query = query.eq("status", "backlog");
+  }
+
+  // Apply additional status filter within tab
+  if (!tab && status && status !== "all") {
+    query = query.eq("status", status);
+  } else if (tab === "active" && status && status !== "all" && (status === "on_target" || status === "delayed")) {
+    // Allow filtering within active tab
     query = query.eq("status", status);
   }
 
@@ -89,6 +105,79 @@ async function fetchActions(params: Required<ActionsQueryParams>): Promise<Pagin
   };
 }
 
+export interface StatusCounts {
+  on_target: number;
+  delayed: number;
+  complete: number;
+  backlog: number;
+  total: number;
+}
+
+/**
+ * Fetch counts by each status
+ */
+async function fetchStatusCounts(): Promise<StatusCounts> {
+  const supabase = createClient();
+
+  // Fetch all counts in parallel
+  const [onTargetResult, delayedResult, completeResult, backlogResult] = await Promise.all([
+    supabase.from("actions").select("*", { count: "exact", head: true }).eq("status", "on_target"),
+    supabase.from("actions").select("*", { count: "exact", head: true }).eq("status", "delayed"),
+    supabase.from("actions").select("*", { count: "exact", head: true }).eq("status", "complete"),
+    supabase.from("actions").select("*", { count: "exact", head: true }).eq("status", "backlog"),
+  ]);
+
+  if (onTargetResult.error) throw new Error(`Failed to get on_target count: ${onTargetResult.error.message}`);
+  if (delayedResult.error) throw new Error(`Failed to get delayed count: ${delayedResult.error.message}`);
+  if (completeResult.error) throw new Error(`Failed to get complete count: ${completeResult.error.message}`);
+  if (backlogResult.error) throw new Error(`Failed to get backlog count: ${backlogResult.error.message}`);
+
+  const on_target = onTargetResult.count ?? 0;
+  const delayed = delayedResult.count ?? 0;
+  const complete = completeResult.count ?? 0;
+  const backlog = backlogResult.count ?? 0;
+
+  return {
+    on_target,
+    delayed,
+    complete,
+    backlog,
+    total: on_target + delayed + complete + backlog,
+  };
+}
+
+/**
+ * Fetch tab counts (active and backlog)
+ */
+async function fetchTabCounts(): Promise<{ activeCount: number; backlogCount: number }> {
+  const supabase = createClient();
+
+  // Get active count (on_target + delayed)
+  const { count: activeCount, error: activeError } = await supabase
+    .from("actions")
+    .select("*", { count: "exact", head: true })
+    .in("status", ["on_target", "delayed"]);
+
+  if (activeError) {
+    throw new Error(`Failed to get active count: ${activeError.message}`);
+  }
+
+  // Get backlog count
+  const { count: backlogCount, error: backlogError } = await supabase
+    .from("actions")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "backlog");
+
+  if (backlogError) {
+    throw new Error(`Failed to get backlog count: ${backlogError.message}`);
+  }
+
+  return {
+    activeCount: activeCount ?? 0,
+    backlogCount: backlogCount ?? 0,
+  };
+}
+
 /**
  * Hook to fetch and manage actions list
  */
@@ -98,6 +187,46 @@ export function useActions(params: ActionsQueryParams = {}) {
   return useQuery({
     queryKey: actionsKeys.list(mergedParams),
     queryFn: () => fetchActions(mergedParams),
+  });
+}
+
+/**
+ * Hook to fetch actions with infinite scroll support
+ */
+export function useActionsInfinite(params: Omit<ActionsQueryParams, "page"> = {}) {
+  const mergedParams = { ...defaultParams, ...params };
+
+  return useInfiniteQuery({
+    queryKey: actionsKeys.infinite(mergedParams),
+    queryFn: ({ pageParam = 1 }) =>
+      fetchActions({ ...mergedParams, page: pageParam }),
+    getNextPageParam: (lastPage) =>
+      lastPage.meta.page < lastPage.meta.pages
+        ? lastPage.meta.page + 1
+        : undefined,
+    initialPageParam: 1,
+  });
+}
+
+/**
+ * Hook to fetch tab counts
+ */
+export function useTabCounts() {
+  return useQuery({
+    queryKey: actionsKeys.counts(),
+    queryFn: fetchTabCounts,
+    staleTime: 30000, // 30 seconds
+  });
+}
+
+/**
+ * Hook to fetch counts by status
+ */
+export function useStatusCounts() {
+  return useQuery({
+    queryKey: actionsKeys.statusCounts(),
+    queryFn: fetchStatusCounts,
+    staleTime: 30000, // 30 seconds
   });
 }
 
@@ -141,11 +270,14 @@ export function useCreateAction() {
       if (result.error) {
         throw new Error(result.error);
       }
-      return result.data!;
+      return result;
     },
     onSuccess: () => {
-      // Invalidate and refetch actions list
-      queryClient.invalidateQueries({ queryKey: actionsKeys.lists() });
+      // Invalidate and refetch all action queries
+      queryClient.invalidateQueries({
+        queryKey: actionsKeys.all,
+        refetchType: 'all',
+      });
     },
   });
 }
@@ -167,8 +299,12 @@ export function useUpdateAction() {
     onSuccess: (data) => {
       // Update the specific action in cache
       queryClient.setQueryData(actionsKeys.detail(data.id), data);
-      // Invalidate and refetch actions list
-      queryClient.invalidateQueries({ queryKey: actionsKeys.lists() });
+      // Invalidate and refetch all action queries (including infinite) and counts
+      // Using refetchType: 'all' ensures inactive queries are also refetched
+      queryClient.invalidateQueries({
+        queryKey: actionsKeys.all,
+        refetchType: 'all',
+      });
     },
   });
 }
@@ -189,8 +325,11 @@ export function useDeleteAction() {
     onSuccess: (_, id) => {
       // Remove from cache
       queryClient.removeQueries({ queryKey: actionsKeys.detail(id) });
-      // Invalidate and refetch actions list
-      queryClient.invalidateQueries({ queryKey: actionsKeys.lists() });
+      // Invalidate and refetch all action queries
+      queryClient.invalidateQueries({
+        queryKey: actionsKeys.all,
+        refetchType: 'all',
+      });
     },
   });
 }
@@ -214,6 +353,7 @@ export function useOptimisticActions() {
     rollback: (id: string) => {
       queryClient.invalidateQueries({ queryKey: actionsKeys.detail(id) });
       queryClient.invalidateQueries({ queryKey: actionsKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: actionsKeys.counts() });
     },
   };
 }
