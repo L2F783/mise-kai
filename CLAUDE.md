@@ -77,22 +77,30 @@ npm run build
 ```
 project/
 ├── src/
-│   ├── components/     # React components
-│   ├── pages/          # Page components / routes
-│   ├── api/            # API routes / handlers
-│   ├── lib/            # Shared utilities
-│   ├── types/          # TypeScript types
-│   └── hooks/          # Custom React hooks
+│   ├── app/              # Next.js App Router
+│   │   ├── api/v1/       # Versioned API routes
+│   │   ├── auth/         # Auth pages (login, forgot-password, etc.)
+│   │   └── dashboard/    # Protected dashboard pages
+│   ├── components/       # React components
+│   │   ├── layout/       # Layout components (Header, etc.)
+│   │   ├── providers/    # Context providers
+│   │   └── ui/           # shadcn/ui components
+│   ├── hooks/            # Custom React hooks
+│   ├── lib/              # Shared utilities
+│   │   ├── supabase/     # Supabase client configuration
+│   │   └── validations/  # Zod validation schemas
+│   └── types/            # TypeScript types
+├── supabase/
+│   └── migrations/       # SQL migration files
 ├── tests/
-│   ├── unit/           # Unit tests
-│   ├── integration/    # Integration tests
-│   └── e2e/            # End-to-end tests
+│   ├── unit/             # Unit tests (Vitest)
+│   ├── integration/      # Integration tests
+│   └── e2e/              # End-to-end tests (Playwright)
 ├── docs/
-│   ├── ARCHITECTURE.md    # Technology decisions & system design
 │   ├── PROJECT_CHARTER.md
 │   ├── PRD.md
-│   └── modules/
-└── public/             # Static assets
+│   └── modules/          # Module implementation specs
+└── public/               # Static assets
 ```
 
 ## Code Conventions
@@ -203,8 +211,8 @@ Required variables (see `.env.example`):
 ```
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SECRET_KEY=
 
 # AI (for delay categorization)
 ANTHROPIC_API_KEY=
@@ -218,8 +226,12 @@ ANTHROPIC_API_KEY=
 
 ## Learnings from Code Review
 
-<!-- Add rules discovered during PR reviews here -->
-<!-- Format: DON'T / DO / REASON -->
+See [docs/lessons.md](docs/lessons.md) for detailed lessons learned.
+
+### L-001: Verify Folder Structure Before Implementation (2026-02-01)
+- DON'T: Assume scaffolding tools create the correct structure
+- DO: Verify folder structure matches CLAUDE.md before writing code
+- REASON: Restructuring after implementation wastes time and risks conflicts
 
 ---
 
