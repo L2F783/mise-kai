@@ -37,7 +37,7 @@ MiseKai is built with a **pragmatic simplicity** philosophy: optimize for develo
 | Frontend Framework | Next.js 14 | Full-stack, excellent DX, Vercel-optimized |
 | Backend/Database | Supabase | Auth + DB + RLS in one, PostgreSQL portable |
 | Hosting | Vercel | Zero-config deploys, edge network, native Next.js |
-| Styling | Tailwind CSS | Utility-first, no CSS-in-JS runtime |
+| Styling | Tailwind CSS v4 | Utility-first, no CSS-in-JS runtime, CSS-native |
 | Validation | Zod | TypeScript-first, runtime + compile-time safety |
 | Data Fetching | TanStack Query | Caching, optimistic updates, devtools |
 | UI Components | shadcn/ui | Copy-paste ownership, Radix primitives |
@@ -330,32 +330,35 @@ graph TB
 
 #### Comparison Matrix
 
-| Feature | Tailwind CSS | CSS Modules | styled-components |
-|---------|-------------|-------------|-------------------|
+| Feature | Tailwind CSS v4 | CSS Modules | styled-components |
+|---------|-----------------|-------------|-------------------|
 | Runtime Cost | Zero | Zero | ~12KB + runtime |
 | Learning Curve | Medium | Low | Medium |
 | Bundle Size | Purged (small) | Small | Medium |
 | Type Safety | Via plugins | None | Full |
-| Design System | Via config | Manual | Theme provider |
+| Design System | Via config + CSS | Manual | Theme provider |
 | Server Components | Works | Works | Requires config |
 | DX with AI | Excellent | Good | Good |
+| CSS-native Features | Yes (v4) | N/A | No |
 
-#### Tailwind CSS (Chosen)
+#### Tailwind CSS v4 (Chosen)
 
 **Pros**:
 - Zero runtime JavaScript - critical for Server Components
 - Utility classes are self-documenting
-- Design system via tailwind.config.js
+- CSS-native configuration with `@import "tailwindcss"` and `@config`
 - Excellent AI/Claude familiarity - can generate markup
-- Purges unused CSS = tiny production bundles
+- Automatic unused CSS removal = tiny production bundles
 - Consistent spacing/color scales out of box
 - Works perfectly with shadcn/ui
+- Native CSS variables and modern CSS features
+- Improved performance with new engine
 
 **Cons**:
 - HTML can look "busy" with many classes
 - Learning utility names takes time
 - Custom designs may need many arbitrary values
-- Debugging can require understanding of utilities
+- v4 migration required updating PostCSS config (`@tailwindcss/postcss`)
 
 #### CSS Modules (Alternative 1)
 

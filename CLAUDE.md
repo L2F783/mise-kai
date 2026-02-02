@@ -36,7 +36,7 @@ npm run build
 - **Data Fetching**: TanStack Query
 - **UI Components**: shadcn/ui (Radix primitives)
 - **Testing**: Vitest, Playwright
-- **Styling**: Tailwind CSS
+- **Styling**: Tailwind CSS v4
 - **AI**: Claude API (delay categorization, insights)
 - **Hosting**: Vercel
 
@@ -235,4 +235,4 @@ See [docs/lessons.md](docs/lessons.md) for detailed lessons learned.
 
 ---
 
-*Last updated: 2026-02-01*
+*Last updated: 2026-02-01* (Tailwind CSS v4 upgrade)
