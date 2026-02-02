@@ -1,8 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Action, ActionStatus, DueDateHistory } from "@/types/database";
-import type { CreateActionInput, UpdateActionInput, ActionsQueryInput } from "@/lib/validations/action";
+import type { Action, ActionStatus, DelayReason, DueDateHistory, Profile } from "@/types/database";
+import type { CreateActionInput, DelayReasonInput, UpdateActionInput, ActionsQueryInput } from "@/lib/validations/action";
 import type { ActionTab } from "@/components/actions/action-tabs";
 export { WIP_LIMIT } from "./constants";
+
+/**
+ * Team member type for owner selection dropdown
+ */
+export type TeamMember = Pick<Profile, "id" | "full_name" | "email">;
 
 export interface PaginatedActions {
   data: Action[];
@@ -152,8 +157,9 @@ export async function getActionById(id: string): Promise<Action | null> {
 
 /**
  * Create a new action.
- * The owner_id is automatically set to the authenticated user.
- * If autoBacklog is true, the action is created with backlog status.
+ * - If owner_id is provided (PM assigning to team member), use that
+ * - Otherwise, owner_id is set to the authenticated user
+ * - If autoBacklog is true, the action is created with backlog status
  */
 export async function createAction(input: CreateActionInput, autoBacklog = false): Promise<Action> {
   const supabase = await createClient();
@@ -164,11 +170,14 @@ export async function createAction(input: CreateActionInput, autoBacklog = false
     throw new Error("Authentication required");
   }
 
+  // Use provided owner_id (PM assignment) or default to current user
+  const ownerId = input.owner_id ?? user.id;
+
   const insertData = {
     description: input.description,
     due_date: input.due_date,
     notes: input.notes ?? null,
-    owner_id: user.id,
+    owner_id: ownerId,
     status: (autoBacklog ? "backlog" : "on_target") as ActionStatus,
     client_visible: false,
     auto_flagged: false,
@@ -228,6 +237,10 @@ export async function updateAction(id: string, input: UpdateActionInput): Promis
       // Clear completed_at if status changes from complete
       updateData.completed_at = null;
     }
+  }
+  // PM can reassign owner (Issue #23)
+  if (input.owner_id !== undefined) {
+    updateData.owner_id = input.owner_id;
   }
 
   // Update the action
@@ -325,4 +338,85 @@ export async function getDueDateHistory(actionId: string): Promise<DueDateHistor
   }
 
   return (data ?? []) as DueDateHistory[];
+}
+
+/**
+ * Create a delay reason record (M-03: Delay Categorization).
+ * Called when an action's status changes to "delayed".
+ */
+/**
+ * Get all active team members for owner selection.
+ * Returns id, full_name, and email for dropdown display.
+ */
+export async function getActiveTeamMembers(): Promise<TeamMember[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .eq("status", "active")
+    .order("full_name", { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to fetch team members: ${error.message}`);
+  }
+
+  return (data ?? []) as TeamMember[];
+}
+
+/**
+ * Get count of active items (on_target + delayed) for a specific user.
+ * Used for WIP limit check when PM assigns action to team member.
+ */
+export async function getActiveCountForUser(userId: string): Promise<number> {
+  const supabase = await createClient();
+
+  const { count, error } = await supabase
+    .from("actions")
+    .select("*", { count: "exact", head: true })
+    .eq("owner_id", userId)
+    .in("status", ["on_target", "delayed"]);
+
+  if (error) {
+    throw new Error(`Failed to get active count for user: ${error.message}`);
+  }
+
+  return count ?? 0;
+}
+
+export async function createDelayReason(
+  actionId: string,
+  input: DelayReasonInput
+): Promise<DelayReason> {
+  const supabase = await createClient();
+
+  // Get current user
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    throw new Error("Authentication required");
+  }
+
+  const insertData = {
+    action_id: actionId,
+    reason: input.reason,
+    category: input.category ?? null,
+    // AI categorization fields - set defaults for manual entry
+    subcategory: null,
+    confidence: null,
+    ai_overridden: false,
+    manual_category: input.category ?? null,
+    created_by: user.id,
+  };
+
+  const { data, error } = await supabase
+    .from("delay_reasons")
+    .insert(insertData as never)
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to create delay reason: ${error.message}`);
+  }
+
+  return data as DelayReason;
 }

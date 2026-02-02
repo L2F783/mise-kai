@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import type { Action, ActionStatus } from "@/types/database";
-import type { CreateActionInput, UpdateActionInput } from "@/lib/validations/action";
+import type { CreateActionInput, DelayReasonInput, UpdateActionInput } from "@/lib/validations/action";
 import type { ActionTab } from "@/components/actions/action-tabs";
 import {
   createActionAction,
@@ -51,6 +51,7 @@ export const actionsKeys = {
   detail: (id: string) => [...actionsKeys.details(), id] as const,
   counts: () => [...actionsKeys.all, "counts"] as const,
   statusCounts: () => [...actionsKeys.all, "statusCounts"] as const,
+  teamMembers: () => ["teamMembers"] as const,
 };
 
 /**
@@ -220,6 +221,45 @@ export function useTabCounts() {
 }
 
 /**
+ * Team member type for owner selection dropdown
+ */
+export interface TeamMember {
+  id: string;
+  full_name: string | null;
+  email: string;
+}
+
+/**
+ * Fetch active team members for owner selection
+ */
+async function fetchTeamMembers(): Promise<TeamMember[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .eq("status", "active")
+    .order("full_name", { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to fetch team members: ${error.message}`);
+  }
+
+  return (data ?? []) as TeamMember[];
+}
+
+/**
+ * Hook to fetch active team members for owner selection (PM feature)
+ */
+export function useTeamMembers() {
+  return useQuery({
+    queryKey: actionsKeys.teamMembers(),
+    queryFn: fetchTeamMembers,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+/**
  * Hook to fetch counts by status
  */
 export function useStatusCounts() {
@@ -289,8 +329,8 @@ export function useUpdateAction() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: UpdateActionInput }) => {
-      const result = await updateActionAction(id, data);
+    mutationFn: async ({ id, data, delayReason }: { id: string; data: UpdateActionInput; delayReason?: DelayReasonInput }) => {
+      const result = await updateActionAction(id, data, delayReason);
       if (result.error) {
         throw new Error(result.error);
       }

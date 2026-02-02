@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ActionStatus } from "@/types/database";
+import type { ActionStatus, DelayCategory } from "@/types/database";
 
 /**
  * Helper to validate date is not in the past (for create)
@@ -32,6 +32,8 @@ export const createActionSchema = z.object({
     .max(2000, "Notes must not exceed 2000 characters")
     .optional()
     .nullable(),
+  // PM can assign action to a team member (Issue #23)
+  owner_id: z.string().uuid().optional(),
 });
 
 /**
@@ -51,6 +53,8 @@ export const updateActionSchema = z.object({
     .optional()
     .nullable(),
   status: z.enum(["on_target", "delayed", "complete", "backlog"] as const).optional(),
+  // PM can reassign action to a different team member (Issue #23)
+  owner_id: z.string().uuid().optional(),
 });
 
 /**
@@ -72,10 +76,27 @@ export const editFormSchema = createActionSchema.extend({
   status: z.enum(["on_target", "delayed", "complete", "backlog"] as const).optional(),
 });
 
+/**
+ * Schema for delay reason input (M-03: Delay Categorization)
+ * - reason: freeform text, minimum 10 characters (per DB constraint)
+ * - category: optional manual category selection
+ */
+export const delayReasonSchema = z.object({
+  reason: z
+    .string()
+    .min(10, "Reason must be at least 10 characters")
+    .max(500, "Reason must not exceed 500 characters"),
+  category: z
+    .enum(["people", "process", "technical", "capacity", "external", "other"] as const)
+    .optional()
+    .nullable(),
+});
+
 export type CreateActionInput = z.infer<typeof createActionSchema>;
 export type UpdateActionInput = z.infer<typeof updateActionSchema>;
 export type EditFormInput = z.infer<typeof editFormSchema>;
 export type ActionsQueryInput = z.infer<typeof actionsQuerySchema>;
+export type DelayReasonInput = z.infer<typeof delayReasonSchema>;
 
 // Status options available for manual update
 export const MANUAL_STATUS_OPTIONS: Array<{ value: ActionStatus; label: string }> = [
@@ -83,4 +104,14 @@ export const MANUAL_STATUS_OPTIONS: Array<{ value: ActionStatus; label: string }
   { value: "delayed", label: "Delayed" },
   { value: "complete", label: "Complete" },
   { value: "backlog", label: "Backlog" },
+];
+
+// Delay category options for manual categorization
+export const DELAY_CATEGORY_OPTIONS: Array<{ value: DelayCategory; label: string; description: string }> = [
+  { value: "people", label: "People", description: "Team availability, dependencies on others" },
+  { value: "process", label: "Process", description: "Workflow issues, approvals, handoffs" },
+  { value: "technical", label: "Technical", description: "Technical blockers, bugs, infrastructure" },
+  { value: "capacity", label: "Capacity", description: "Workload, bandwidth constraints" },
+  { value: "external", label: "External", description: "Third-party dependencies, external factors" },
+  { value: "other", label: "Other", description: "Uncategorized delays" },
 ];

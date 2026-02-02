@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,9 +9,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ActionForm } from "./action-form";
+import { DelayReasonModal } from "./delay-reason-modal";
 import { useUpdateAction } from "@/hooks/use-actions";
 import type { Action } from "@/types/database";
-import type { EditFormInput } from "@/lib/validations/action";
+import type { DelayReasonInput, EditFormInput } from "@/lib/validations/action";
 import { toast } from "sonner";
 
 interface EditActionModalProps {
@@ -21,8 +23,27 @@ interface EditActionModalProps {
 
 export function EditActionModal({ action, open, onOpenChange }: EditActionModalProps) {
   const updateAction = useUpdateAction();
+  const [pendingFormData, setPendingFormData] = useState<EditFormInput | null>(null);
+  const [showDelayReasonModal, setShowDelayReasonModal] = useState(false);
 
   const handleSubmit = async (data: EditFormInput) => {
+    if (!action) return;
+
+    // Check if status is changing to "delayed" and it wasn't already delayed
+    const isChangingToDelayed = data.status === "delayed" && action.status !== "delayed";
+
+    if (isChangingToDelayed) {
+      // Store the form data and show delay reason modal
+      setPendingFormData(data);
+      setShowDelayReasonModal(true);
+      return;
+    }
+
+    // Normal update without delay reason
+    await performUpdate(data);
+  };
+
+  const performUpdate = async (data: EditFormInput, delayReason?: DelayReasonInput) => {
     if (!action) return;
 
     try {
@@ -32,12 +53,13 @@ export function EditActionModal({ action, open, onOpenChange }: EditActionModalP
           description: data.description,
           due_date: data.due_date,
           notes: data.notes,
-          // Include status if provided (schema ensures it's a valid manual status)
           ...(data.status ? { status: data.status } : {}),
         },
+        delayReason,
       });
       toast.success("Action updated successfully");
       onOpenChange(false);
+      setPendingFormData(null);
     } catch (error) {
       if (error instanceof Error) {
         toast.error(error.message);
@@ -47,28 +69,52 @@ export function EditActionModal({ action, open, onOpenChange }: EditActionModalP
     }
   };
 
+  const handleDelayReasonSubmit = async (delayReasonData: DelayReasonInput) => {
+    if (!pendingFormData) return;
+    await performUpdate(pendingFormData, delayReasonData);
+    setShowDelayReasonModal(false);
+  };
+
+  const handleDelayReasonCancel = () => {
+    // User cancelled delay reason - don't change status
+    setShowDelayReasonModal(false);
+    setPendingFormData(null);
+    // Keep the edit modal open so user can change their selection
+  };
+
   const handleCancel = () => {
+    setPendingFormData(null);
     onOpenChange(false);
   };
 
   if (!action) return null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>Edit Action</DialogTitle>
-          <DialogDescription>
-            Update the action details. All fields marked with * are required.
-          </DialogDescription>
-        </DialogHeader>
-        <ActionForm
-          action={action}
-          onSubmit={handleSubmit}
-          onCancel={handleCancel}
-          isSubmitting={updateAction.isPending}
-        />
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Edit Action</DialogTitle>
+            <DialogDescription>
+              Update the action details. All fields marked with * are required.
+            </DialogDescription>
+          </DialogHeader>
+          <ActionForm
+            action={action}
+            onSubmit={handleSubmit}
+            onCancel={handleCancel}
+            isSubmitting={updateAction.isPending}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <DelayReasonModal
+        open={showDelayReasonModal}
+        onOpenChange={setShowDelayReasonModal}
+        onSubmit={handleDelayReasonSubmit}
+        onCancel={handleDelayReasonCancel}
+        isSubmitting={updateAction.isPending}
+      />
+    </>
   );
 }
