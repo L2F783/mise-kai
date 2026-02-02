@@ -3,14 +3,16 @@ import type { ActionStatus } from "@/types/database";
 
 /**
  * Helper to validate date is not in the past (for create)
+ * Compares date strings directly to avoid timezone issues
  */
 const futureDateSchema = z
   .string()
   .refine((date) => {
+    // Get today's date as YYYY-MM-DD in local timezone
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const inputDate = new Date(date);
-    return inputDate >= today;
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    // Compare as strings (YYYY-MM-DD format sorts correctly)
+    return date >= todayStr;
   }, "Due date cannot be in the past");
 
 /**
