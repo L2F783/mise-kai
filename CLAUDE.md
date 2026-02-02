@@ -248,6 +248,11 @@ See [docs/lessons.md](docs/lessons.md) for detailed lessons learned.
 - DO: Verify DB CHECK constraints match TS types
 - REASON: Runtime errors when DB rejects valid TS values
 
+### L-005: Timezone-Safe Date Comparisons (2026-02-02)
+- DON'T: Compare Date objects for date-only comparisons
+- DO: Compare YYYY-MM-DD strings directly
+- REASON: `new Date("2026-02-02")` is UTC midnight, but `new Date()` is local time
+
 ---
 
-*Last updated: 2026-02-02* (Added session learnings L-002 through L-004)
+*Last updated: 2026-02-02* (Added L-005 timezone lesson)
