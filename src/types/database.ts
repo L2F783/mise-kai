@@ -288,3 +288,13 @@ export interface MilestoneWithActions extends Milestone {
 export interface ProjectWithMilestones extends Project {
   milestones: MilestoneWithActions[];
 }
+
+/** Result of critical path method (CPM) calculation */
+export interface CriticalPathResult {
+  /** Actions on the critical path, ordered by sequence */
+  actions: GanttAction[];
+  /** Total duration of the critical path in days */
+  total_duration_days: number;
+  /** Slack time per action (actionId -> days of slack) */
+  slack_times: Record<string, number>;
+}

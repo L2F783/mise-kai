@@ -1,12 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createActionSchema, updateActionSchema } from "@/lib/validations/action";
+import { createActionSchema, updateActionSchema, delayReasonSchema } from "@/lib/validations/action";
+import type { DelayReasonInput } from "@/lib/validations/action";
 import {
   createAction,
   updateAction,
   deleteAction,
+  createDelayReason,
   getActiveCount,
+  getActiveCountForUser,
   WIP_LIMIT,
 } from "@/lib/actions/queries";
 import type { Action } from "@/types/database";
@@ -21,7 +24,8 @@ export interface ActionResult<T = void> {
 
 /**
  * Server action to create a new action.
- * If user is at WIP limit, action is auto-assigned to backlog.
+ * If target owner is at WIP limit, action is auto-assigned to backlog.
+ * PM can assign action to team member via owner_id (Issue #23).
  */
 export async function createActionAction(
   input: unknown
@@ -41,8 +45,15 @@ export async function createActionAction(
       return { error: "Validation failed", fieldErrors };
     }
 
-    // Check WIP limit
-    const activeCount = await getActiveCount();
+    // Check WIP limit for the target owner
+    // If owner_id is provided (PM assignment), check that user's WIP
+    // Otherwise, getActiveCount checks current user's WIP via RLS
+    let activeCount: number;
+    if (result.data.owner_id) {
+      activeCount = await getActiveCountForUser(result.data.owner_id);
+    } else {
+      activeCount = await getActiveCount();
+    }
     const atWipLimit = activeCount >= WIP_LIMIT;
 
     // Create the action (createAction will handle auto-backlog if needed)
@@ -67,10 +78,12 @@ export async function createActionAction(
 
 /**
  * Server action to update an existing action.
+ * If status is changed to "delayed", an optional delayReason can be provided.
  */
 export async function updateActionAction(
   id: string,
-  input: unknown
+  input: unknown,
+  delayReason?: DelayReasonInput
 ): Promise<ActionResult<Action>> {
   try {
     if (!id) {
@@ -91,8 +104,29 @@ export async function updateActionAction(
       return { error: "Validation failed", fieldErrors };
     }
 
+    // Validate delay reason if provided
+    if (delayReason) {
+      const delayResult = delayReasonSchema.safeParse(delayReason);
+      if (!delayResult.success) {
+        const fieldErrors: Record<string, string[]> = {};
+        for (const issue of delayResult.error.issues) {
+          const path = `delayReason.${issue.path.join(".")}`;
+          if (!fieldErrors[path]) {
+            fieldErrors[path] = [];
+          }
+          fieldErrors[path].push(issue.message);
+        }
+        return { error: "Delay reason validation failed", fieldErrors };
+      }
+    }
+
     // Update the action
     const action = await updateAction(id, result.data);
+
+    // Create delay reason record if status is delayed and reason provided
+    if (result.data.status === "delayed" && delayReason) {
+      await createDelayReason(id, delayReason);
+    }
 
     // Revalidate the actions list
     revalidatePath("/dashboard/actions");
