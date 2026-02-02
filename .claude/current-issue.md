@@ -1,61 +1,41 @@
-# Implementation: Issue #1
+# Implementation: Issue #36
 
-## US-001: Team Member Views Personal Actions
+## Issue Details
+**Title**: feat(M-03): Database schema for action dependencies and milestones
+**Priority**: P1
+**Labels**: enhancement, M-03, database, status:in-progress
+**Branch**: `feature/issue-36-database-schema-gantt-dependencies-milestones`
+**PR**: #47
 
-**Branch**: `feature/issue-1-team-member-views-personal-actions`
-**Priority**: P1 | **Effort**: Medium | **Phase**: 1
-
----
-
-## User Story
-
-**As a** team member
-**I want** to see only my assigned actions in a table view
-**So that** I can focus on my work without distraction from others' tasks
-
----
+## Status: ✅ Implementation Complete
 
 ## Acceptance Criteria
+- [x] Create `milestones` table with RLS policies
+- [x] Create `action_dependencies` junction table with RLS policies
+- [x] Add new columns to `actions` table
+- [x] Create indexes for performance (milestone_id, predecessor_id, successor_id)
+- [x] Add check constraint: successor cannot equal predecessor
+- [x] Add check constraint: no circular dependencies (deferred to application logic)
 
-- [ ] User sees table with columns: Date, Description, Due Date, Status, Notes
-- [ ] Only actions where `owner_id = current_user.id` are displayed
-- [ ] Table is sortable by any column
-- [ ] Default sort: Due Date ascending (nearest first)
+## Commits
+1. `0689c29` - feat(db): add database schema for Gantt chart support (#36)
+2. `5721add` - docs: add session learnings L-002 through L-004
+3. `6602e09` - fix: resolve timezone issue in date validation
 
----
+## Database Migrations
+- `005_milestones_table.sql` - Milestones with RLS, indexes, triggers
+- `006_action_dependencies_table.sql` - Dependencies with all 4 types, RLS, unique constraint
+- `007_actions_gantt_columns.sql` - 6 new Gantt columns on actions
 
-## Implementation Steps
+## TypeScript Types
+- `Milestone`, `ActionDependency`, `DependencyType` in `src/types/database.ts`
+- `GanttAction`, `MilestoneWithActions`, `ProjectWithMilestones` helper types
 
-- [ ] Set up project structure (Next.js + Supabase + Tailwind)
-- [ ] Create database schema for actions table
-- [ ] Implement Supabase RLS policies for owner filtering
-- [ ] Create Actions table component with columns
-- [ ] Implement column sorting functionality
-- [ ] Add default sort by Due Date ascending
-- [ ] Write unit tests for table component
-- [ ] Write integration tests for data fetching
-- [ ] Run verification pipeline
+## Verification
+- [x] TypeScript type check: ✅ Pass
+- [x] ESLint: ✅ Pass
+- [x] Unit tests: ✅ 62/62 Pass
 
----
-
-## Technical Notes
-
-- Uses Supabase RLS policies to filter by owner_id
-- Table columns: Date, Description, Due Date, Status, Notes
-- Sortable columns implementation needed
-- PRD Reference: [docs/PRD.md#us-001](docs/PRD.md#us-001-team-member-views-personal-actions)
-
----
-
-## Dependencies
-
-- Supabase project setup
-- Authentication (US-013) - can use mock auth initially
-- Actions database schema (TR-002)
-
----
-
-## Notes
-
-_Space for implementation notes during development_
-
+## Next Steps
+- PR #47 is open and awaiting CI re-run after timezone fix
+- Once CI passes, ready for review and merge

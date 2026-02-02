@@ -1,6 +1,6 @@
 # Product Requirements Document: MiseKai Phase 1 - Actions Register
 
-**Version**: 1.0
+**Version**: 1.2
 **Status**: Draft
 **Last Updated**: February 1, 2026
 **Author**: Patrick Salazar
@@ -262,6 +262,94 @@ MiseKai Phase 1 delivers a web-based Action Register that replaces scattered spr
 
 ---
 
+### US-015: Enhanced Action Register Table
+**As a** team member or PM
+**I want** a feature-rich, Excel-like table interface for the action register
+**So that** I can efficiently view, filter, sort, and edit actions without leaving the list view
+
+**Acceptance Criteria**:
+- [ ] Clickable column headers sort the table (ascending/descending toggle)
+- [ ] Search bar filters actions by description text
+- [ ] Status autocomplete filter shows dropdown with On Target, Delayed, Complete options
+- [ ] Completed items older than 7 days are hidden by default
+- [ ] "Show completed" toggle reveals all completed items regardless of age
+- [ ] Footer row provides quick-add form (Description, Due Date, Assignee)
+- [ ] Assignee column displays owner name with avatar (PM sees all, team member sees own)
+- [ ] Status cell is inline-editable via dropdown
+- [ ] Notes cell is inline-editable via text input (click to edit)
+- [ ] Due Date cell is inline-editable via date picker popover
+- [ ] Edit icon/link on each row opens full edit modal
+- [ ] Trash icon on each row triggers delete confirmation
+- [ ] Changes save automatically on blur/selection with optimistic updates
+- [ ] DataTable component is reusable for other data types (generic implementation)
+
+**Priority**: P1
+**Estimated Effort**: L
+
+---
+
+### US-016: PM Reorders Actions via Drag-and-Drop
+**As a** PM
+**I want** to drag-and-drop actions to set their priority order
+**So that** I can communicate work priority to the team visually
+
+**Acceptance Criteria**:
+- [ ] Drag handle (grip icon) appears on each row for PM only
+- [ ] PM can drag any action row to reorder within the list
+- [ ] New order persists immediately (optimistic update)
+- [ ] Team members see the priority order but cannot drag
+- [ ] Order is global across all assignees (not per-person)
+- [ ] Keyboard accessible: Enter to pick up, arrows to move, Enter to drop
+- [ ] Visual feedback during drag (row lifts, drop indicator shows)
+- [ ] Undo available via Ctrl+Z within 5 seconds of reorder
+
+**Priority**: P1
+**Estimated Effort**: M
+
+---
+
+### US-017: Backlog Management
+**As a** PM or team member
+**I want** to separate active work from backlog items
+**So that** the team can focus on immediate priorities without distraction
+
+**Acceptance Criteria**:
+- [ ] Actions page has Active/Backlog tab toggle
+- [ ] Active tab shows items where is_backlog = false
+- [ ] Backlog tab shows items where is_backlog = true
+- [ ] WIP limit: max 3 active items per assignee enforced
+- [ ] PM can move any item between active/backlog
+- [ ] Team member cannot move items (view only for backlog status)
+- [ ] Moving to active when at WIP limit shows error message
+- [ ] Tab counts shown: "Active (12)" / "Backlog (8)"
+- [ ] Default view is Active tab
+- [ ] Backlog items are not shown in Weekly Review
+
+**Priority**: P1
+**Estimated Effort**: L
+
+---
+
+### US-018: Capacity Notification for PM
+**As a** PM
+**I want** to be notified when team members have capacity for more work
+**So that** I can promote backlog items to keep the team productive
+
+**Acceptance Criteria**:
+- [ ] Badge in header shows count of team members with <3 active items
+- [ ] Badge only visible to PM role
+- [ ] Clicking badge opens Capacity Panel
+- [ ] Panel shows list: Avatar, Name, Active count (e.g., "2/3"), Top backlog item
+- [ ] "Promote" button next to each team member with backlog items
+- [ ] Clicking Promote moves their top backlog item to active
+- [ ] Badge updates in real-time as capacity changes
+- [ ] Badge hidden when all team members are at capacity (3 items each)
+
+**Priority**: P2
+**Estimated Effort**: M
+
+---
+
 ## 3. Functional Requirements
 
 ### FR-001: Action CRUD Operations
@@ -518,6 +606,154 @@ ID, Created Date, Description, Owner, Due Date, Status, Delay Reason, Delay Cate
 
 ---
 
+### FR-009: Reusable DataTable Component
+
+**Description**:
+Generic, headless DataTable component built on TanStack Table v8 that provides sorting, filtering, inline editing, and CRUD operations. Designed for reuse across actions, users, and future data types.
+
+**Inputs**:
+- `columns`: ColumnDef[] (TanStack Table column definitions)
+- `data`: T[] (generic data array)
+- `onRowUpdate`: (id, updates) => Promise<void> (inline edit callback)
+- `onRowDelete`: (id) => Promise<void> (delete callback)
+- `onRowCreate`: (data) => Promise<void> (quick-add callback)
+- `filterConfig`: { searchField, filterFields } (filter configuration)
+- `defaultFilters`: FilterState (e.g., hide old completed)
+- `enableInlineEdit`: boolean (default: true)
+- `enableQuickAdd`: boolean (default: true)
+
+**Outputs**:
+- Rendered table with all interactive features
+- Callbacks invoked on user actions
+
+**Business Rules**:
+- Inline edits trigger validation before save
+- Optimistic updates with rollback on error
+- Sort state persists in URL query params
+- Filter state persists in URL query params
+- Completed items >7 days hidden by default (configurable)
+
+**Acceptance Criteria**:
+- [ ] Component renders with any data type (generic TypeScript)
+- [ ] Sorting works on any sortable column
+- [ ] Filtering works with search + column-specific filters
+- [ ] Inline editing validates and saves on blur
+- [ ] Quick-add validates and creates on submit
+- [ ] All operations show loading/success/error states
+- [ ] Component is accessible (keyboard navigation, ARIA labels)
+
+**Error Handling**:
+- Validation error → inline error message, revert cell
+- Save error → toast notification, revert to previous value
+- Network error → retry prompt with exponential backoff
+
+---
+
+### FR-010: Drag-and-Drop Priority Ordering
+
+**Description**:
+Enable PM to reorder action items via drag-and-drop to set global priority. Order is persisted and visible to all users.
+
+**Inputs**:
+- Drag start: `action_id` being dragged
+- Drop position: `target_index` in list
+- User role: must be 'pm'
+
+**Outputs**:
+- Updated `sort_order` values for affected rows
+- Reordered UI reflecting new positions
+
+**Business Rules**:
+- Only PM role can initiate drag operations
+- Sort order is global (not per-assignee)
+- Lower sort_order = higher priority (1 is top)
+- Reorder updates all affected items in single transaction
+- Completed items maintain their relative order but sort below active
+- Backlog items have separate sort_order sequence
+
+**Acceptance Criteria**:
+- [ ] PM can drag any row to new position
+- [ ] Non-PM users see drag handles disabled/hidden
+- [ ] Batch update API handles reorder efficiently
+- [ ] Optimistic update with rollback on error
+- [ ] Maximum 100 items can be reordered in single operation
+
+**Error Handling**:
+- Non-PM attempts drag → operation ignored, no error shown
+- Network failure → toast "Failed to save order", revert to previous
+- Concurrent edit conflict → refetch and reapply if possible
+
+---
+
+### FR-011: Active/Backlog Status Management
+
+**Description**:
+Manage actions as either "active" (in focus) or "backlog" (future work) with WIP limits.
+
+**Inputs**:
+- `action_id`: UUID
+- `is_backlog`: boolean (true = backlog, false = active)
+- `owner_id`: UUID (for WIP limit check)
+
+**Outputs**:
+- Updated action with new backlog status
+- Error if WIP limit exceeded
+
+**Business Rules**:
+- WIP limit: 3 active items maximum per assignee
+- PM can move any item regardless of owner
+- Team members cannot change backlog status (read-only)
+- Moving to active checks: count WHERE owner_id = X AND is_backlog = false < 3
+- Moving to backlog always allowed (no limit)
+- New actions default to backlog = false (active)
+- If new action would exceed WIP, prompt to add to backlog instead
+
+**Acceptance Criteria**:
+- [ ] PM can toggle any action's backlog status
+- [ ] WIP limit enforced on move to active
+- [ ] Clear error message when limit exceeded
+- [ ] Tab counts update immediately after move
+- [ ] RLS policies enforce edit restrictions
+
+**Error Handling**:
+- WIP limit exceeded → 400 "Cannot add to active: [Name] has 3 active items. Move to backlog or complete an existing item."
+- Non-PM attempts move → 403 "Only PM can change backlog status"
+
+---
+
+### FR-012: Capacity Alert System
+
+**Description**:
+Alert PM when team members have capacity (fewer than 3 active items) to receive more work.
+
+**Inputs**:
+- Current user role (PM only sees alerts)
+- Team member active item counts
+
+**Outputs**:
+- Badge count of team members with capacity
+- Capacity panel with details and promote actions
+
+**Business Rules**:
+- Capacity = active_count < 3
+- Only count active team members (not deactivated)
+- Update in real-time (via query refetch on mutations)
+- "Promote" moves top backlog item (by sort_order) to active
+- If no backlog items, show "No backlog items" instead of Promote button
+
+**Acceptance Criteria**:
+- [ ] Badge shows correct count of team members with capacity
+- [ ] Badge hidden when count = 0
+- [ ] Panel lists all team members with capacity
+- [ ] Promote action works correctly
+- [ ] Real-time updates on item completion/creation
+
+**Error Handling**:
+- Promote when no backlog → toast "No backlog items for [Name]"
+- Promote when at capacity → should not happen (button hidden), but 400 if attempted
+
+---
+
 ## 4. Technical Requirements
 
 ### TR-001: API Specifications
@@ -717,6 +953,215 @@ CREATE INDEX idx_delay_reasons_category ON delay_reasons(category);
 
 ---
 
+### TR-005: DataTable Component Specification
+
+**Component Architecture**:
+```
+src/components/ui/data-table/
+├── data-table.tsx          # Main generic component
+├── data-table-header.tsx   # Sortable column headers
+├── data-table-toolbar.tsx  # Search + filters bar
+├── data-table-body.tsx     # Rows with inline editing
+├── data-table-footer.tsx   # Quick-add row
+├── data-table-pagination.tsx # Pagination controls
+├── editable-cell.tsx       # Generic inline edit cell
+├── use-data-table.ts       # Hook for table state management
+└── types.ts                # TypeScript interfaces
+```
+
+**Technology Stack**:
+- @tanstack/react-table v8 (headless table logic)
+- @tanstack/react-query (server state, optimistic updates)
+- react-hook-form + zod (inline edit validation)
+- shadcn/ui (Table, Input, Select, Popover, Calendar, Badge)
+- nuqs (URL state persistence for filters/sort)
+
+**Inline Editing Specification**:
+
+| Cell Type | Edit Trigger | Edit Component | Save Trigger |
+|-----------|--------------|----------------|--------------|
+| Status | Click badge | Select dropdown | Selection change |
+| Notes | Click text | Textarea (auto-expand) | Blur or Enter |
+| Due Date | Click date | Calendar popover | Date selection |
+
+**Quick-Add Footer Specification**:
+
+| Field | Component | Validation | Default |
+|-------|-----------|------------|---------|
+| Description | Input | min 5 chars, max 500 | (empty) |
+| Due Date | DatePicker | today or future | tomorrow |
+| Assignee | Select | valid user ID | current user |
+
+**Filter Behavior**:
+
+```typescript
+interface DataTableFilterConfig {
+  searchField: string;           // e.g., "description"
+  searchPlaceholder: string;     // e.g., "Search actions..."
+  columnFilters: {
+    field: string;               // e.g., "status"
+    type: "select" | "date-range";
+    options?: { label: string; value: string }[];
+  }[];
+  defaultFilters: {
+    hideCompletedOlderThan?: number; // days, default 7
+  };
+}
+```
+
+**URL State Persistence**:
+- `?sort=due_date:asc` - current sort
+- `?status=delayed` - status filter
+- `?q=meeting` - search query
+- `?showAllCompleted=true` - completed filter toggle
+
+**Accessibility Requirements**:
+- All interactive elements keyboard accessible
+- ARIA labels on sortable headers ("Sort by Due Date")
+- Focus management during inline edit
+- Screen reader announcements for sort/filter changes
+
+---
+
+### TR-006: Drag-and-Drop Implementation
+
+**Technology Stack**:
+- @dnd-kit/core (drag-and-drop primitives)
+- @dnd-kit/sortable (sortable list utilities)
+- @dnd-kit/utilities (CSS transforms)
+
+**Component Architecture**:
+```
+src/components/ui/data-table/
+├── sortable-row.tsx       # Wrapper for draggable table rows
+├── drag-handle.tsx        # Grip icon with drag listeners
+└── use-table-dnd.ts       # Hook for DnD state management
+```
+
+**Drag Interaction Specification**:
+
+| Action | Mouse | Keyboard | Touch |
+|--------|-------|----------|-------|
+| Start drag | Click + hold handle | Enter on handle | Long press handle |
+| Move item | Drag cursor | Arrow keys | Drag finger |
+| Drop item | Release | Enter | Release |
+| Cancel | Escape | Escape | Drag to edge |
+
+**Visual Feedback**:
+- Dragging row: `opacity: 0.8`, `box-shadow: lg`, `scale: 1.02`
+- Drop indicator: `border-top: 2px solid primary`
+- Invalid drop zone: `cursor: not-allowed`
+
+**Performance**:
+- Use CSS transforms (not position) for smooth 60fps
+- Virtualization compatible (if list > 100 items)
+- Debounce API calls: save after 300ms of no movement
+
+**Accessibility**:
+- `aria-grabbed` on draggable rows
+- `aria-dropeffect="move"` on valid drop zones
+- Live region announces: "Item grabbed", "Moved to position X", "Item dropped"
+
+---
+
+### TR-007: Backlog Data Model
+
+**Schema Changes**:
+```sql
+-- Migration: 002_add_priority_and_backlog.sql
+ALTER TABLE actions
+  ADD COLUMN is_backlog BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN sort_order INTEGER;
+
+-- Backlog index for tab filtering
+CREATE INDEX idx_actions_is_backlog ON actions(is_backlog);
+
+-- Sort order index for active items only
+CREATE INDEX idx_actions_sort_order ON actions(sort_order)
+  WHERE is_backlog = FALSE;
+
+-- Composite index for common query pattern
+CREATE INDEX idx_actions_owner_backlog ON actions(owner_id, is_backlog);
+
+-- Initialize sort_order for existing active items
+UPDATE actions
+SET sort_order = row_number
+FROM (
+  SELECT id, ROW_NUMBER() OVER (ORDER BY due_date ASC) as row_number
+  FROM actions
+  WHERE is_backlog = FALSE
+) AS ordered
+WHERE actions.id = ordered.id;
+```
+
+**Updated Actions Interface**:
+```typescript
+interface Action {
+  id: string;
+  description: string;
+  owner_id: string;
+  due_date: string;
+  status: "on_target" | "delayed" | "complete";
+  notes: string | null;
+  client_visible: boolean;
+  auto_flagged: boolean;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  // New fields
+  is_backlog: boolean;
+  sort_order: number | null;
+}
+```
+
+**Query Patterns**:
+```typescript
+// Active items (sorted by priority)
+const activeQuery = supabase
+  .from("actions")
+  .select("*")
+  .eq("is_backlog", false)
+  .order("sort_order", { ascending: true });
+
+// Backlog items (sorted by due date)
+const backlogQuery = supabase
+  .from("actions")
+  .select("*")
+  .eq("is_backlog", true)
+  .order("due_date", { ascending: true });
+
+// Capacity check
+const capacityQuery = supabase
+  .from("actions")
+  .select("owner_id, count(*)")
+  .eq("is_backlog", false)
+  .neq("status", "complete")
+  .group("owner_id");
+```
+
+**API Endpoints**:
+```
+PATCH /api/v1/actions/reorder
+Request:
+  - items: [{ id: UUID, sort_order: number }]
+Response:
+  - 200: { data: { updated: number } }
+  - 403: { error: "PM role required" }
+
+PATCH /api/v1/actions/:id/backlog
+Request:
+  - is_backlog: boolean
+Response:
+  - 200: { data: Action }
+  - 400: { error: "WIP limit reached" } (if moving to active when at 3)
+
+GET /api/v1/team/capacity
+Response:
+  - 200: { data: [{ user_id, name, active_count, top_backlog }] }
+```
+
+---
+
 ## 5. UI/UX Requirements
 
 ### Screen: Login Page
@@ -743,33 +1188,84 @@ CREATE INDEX idx_delay_reasons_category ON delay_reasons(category);
 **Purpose**: View and manage actions
 
 **Layout**:
-- Header: App logo, user name, logout button
-- Filters bar: Status dropdown, Owner dropdown (PM only), Due date picker, Search box
-- Actions table: Sortable columns
+- Header: App logo, user name, capacity badge (PM only), logout button
+- Tab toggle: Active / Backlog tabs with counts
+- Toolbar: Search input, Status filter (autocomplete), "Show completed" toggle, Owner filter (PM only)
+- Actions table: Sortable columns with inline editing, drag handles for PM
+- Quick-add footer: Inline form for rapid action creation
 - Pagination: Page numbers, items per page selector
-- Floating action button: "+ New Action"
+
+**Tab Toggle**:
+| Tab | Filter | Sort | Badge |
+|-----|--------|------|-------|
+| Active | is_backlog = false | sort_order ASC | Count of active items |
+| Backlog | is_backlog = true | due_date ASC | Count of backlog items |
 
 **Table Columns**:
-| Column | Width | Sortable | Notes |
-|--------|-------|----------|-------|
-| Status | 100px | Yes | Colored badge (green/yellow/gray) |
-| Description | flex | No | Truncate at 80 chars, tooltip on hover |
-| Owner | 120px | Yes | PM only column |
-| Due Date | 100px | Yes | Red if overdue |
-| Actions | 80px | No | Edit, Delete icons |
+| Column | Width | Sortable | Editable | Notes |
+|--------|-------|----------|----------|-------|
+| ⠿ (drag) | 40px | No | No | PM only: Drag to reorder, cursor: grab |
+| Status | 100px | Yes | Yes (dropdown) | Colored badge (green/yellow/gray), click to change |
+| Description | flex | No | No | Truncate at 80 chars, tooltip on hover |
+| Assignee | 140px | Yes | No | Avatar + name (PM sees all, team member sees own) |
+| Due Date | 120px | Yes | Yes (date picker) | Red if overdue, click to change |
+| Notes | 150px | No | Yes (text input) | Truncate at 30 chars, click to edit |
+| Actions | 80px | No | No | Edit link + Trash icon |
+
+**Drag Handle Column (PM Only)**:
+| Property | Value |
+|----------|-------|
+| Column | ⠿ (grip icon) |
+| Width | 40px |
+| Visible To | PM only (hidden for team members) |
+| Behavior | Drag to reorder, cursor changes to grab/grabbing |
+| Accessibility | Enter to pick up, arrows to move, Enter to drop |
+
+**Capacity Badge (PM Only)**:
+| Property | Value |
+|----------|-------|
+| Location | Header, next to user menu |
+| Format | Orange badge with number (e.g., "3") |
+| Tooltip | "3 team members ready for more work" |
+| Click | Opens Capacity Panel popover |
+| Hidden | When all team members are at capacity (3 items each) |
+
+**Toolbar Specification**:
+- Search input: Filters by description text, debounced (300ms)
+- Status filter: Autocomplete dropdown with On Target, Delayed, Complete options
+- "Show completed" toggle: Default OFF (hides completed items >7 days old)
+- Owner filter (PM only): Dropdown of all team members
+
+**Quick-Add Footer**:
+| Field | Component | Placeholder | Required |
+|-------|-----------|-------------|----------|
+| Description | Input | "Add new action..." | Yes |
+| Due Date | DatePicker | Tomorrow | Yes |
+| Assignee | Select | Current user | Yes (PM only visible) |
+| Add button | IconButton | "+" | - |
+
+**Inline Editing Interactions**:
+- Status: Click badge → dropdown appears → select new status → auto-save
+- Notes: Click text → input appears with current value → edit → blur or Enter to save
+- Due Date: Click date → calendar popover → select date → auto-save
+- All edits use optimistic updates with rollback on error
 
 **User Flow**:
 1. User lands on list, sees their actions (or all if PM)
-2. User can sort by clicking column headers
-3. User can filter using filter bar
-4. User clicks row to view/edit
-5. User clicks "+ New Action" to create
+2. User can sort by clicking column headers (toggle asc/desc)
+3. User can filter using toolbar (search, status, completed toggle)
+4. User can inline-edit Status, Notes, or Due Date by clicking the cell
+5. User can add new action via quick-add footer row
+6. User clicks Edit link to open full edit modal
+7. User clicks Trash icon to delete (with confirmation)
 
 **States**:
 - Loading: Skeleton table rows
 - Empty: Illustration + "No actions yet. Create your first one!"
 - Error: "Failed to load actions. Retry" button
 - Filtered Empty: "No actions match filters. Clear filters"
+- Saving: Cell shows spinner during save
+- Save Error: Toast notification with "Retry" option, cell reverts
 
 ---
 
@@ -890,6 +1386,40 @@ CREATE INDEX idx_delay_reasons_category ON delay_reasons(category);
 - Role (team_member, pm)
 - Status (active, pending, deactivated)
 - Actions: Resend Invite, Deactivate, Reactivate
+
+---
+
+### Screen: Capacity Panel (PM Only)
+
+**Purpose**: Show team members with capacity and enable backlog promotion
+
+**Trigger**: Click capacity badge in header
+
+**Layout** (Popover, 400px wide):
+- Header: "Team Capacity" + close button
+- List of team members with capacity (<3 active items)
+
+**List Item Contents**:
+| Element | Description |
+|---------|-------------|
+| Avatar | User profile image (32px) |
+| Name | Full name |
+| Capacity | "2/3 active" with progress bar |
+| Top Backlog | Description truncated (40 chars) or "No backlog items" |
+| Promote | Button (if backlog exists) |
+
+**User Flow**:
+1. PM sees capacity badge "3" in header
+2. PM clicks badge → Capacity Panel opens
+3. Panel shows: Alice (2/3), Bob (1/3), Carol (2/3)
+4. PM clicks "Promote" next to Bob
+5. Bob's top backlog item moves to active (2/3)
+6. Badge updates to "2"
+
+**States**:
+- Loading: Skeleton list
+- Empty: "All team members are at full capacity"
+- Error: "Failed to load capacity. Retry"
 
 ---
 
@@ -1028,6 +1558,8 @@ Explicitly NOT included in Phase 1:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 1.2 | February 1, 2026 | Patrick Salazar | Added US-016 (PM Drag-and-Drop Reordering), US-017 (Backlog Management), US-018 (Capacity Notification), FR-010 (Drag-and-Drop Priority Ordering), FR-011 (Active/Backlog Status Management), FR-012 (Capacity Alert System), TR-006 (Drag-and-Drop Implementation), TR-007 (Backlog Data Model), updated Actions List UI/UX with tabs and drag handles, added Capacity Panel screen |
+| 1.1 | February 1, 2026 | Patrick Salazar | Added US-015 (Enhanced Action Register Table), FR-009 (Reusable DataTable Component), TR-005 (DataTable Component Specification), updated Actions List UI/UX with inline editing and quick-add footer |
 | 1.0 | February 1, 2026 | Patrick Salazar | Initial draft |
 
 ---
